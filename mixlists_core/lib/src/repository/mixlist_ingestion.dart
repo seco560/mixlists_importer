@@ -83,9 +83,17 @@ class MixlistIngestion {
     });
   }
 
-  /// Same pattern as [getOrCreateArtistId], scoped by `(name, artistId)`
-  /// when URI-less. Backfills [recordLabel] only if the row doesn't
-  /// already have one.
+  /// Matches by [spotifyURI] first, then falls back to a case-insensitive
+  /// `(name, artistId)` match -- Spotify doesn't always serve the same
+  /// album URI for what's really the same album across different lookups
+  /// (reissues, regional catalog variants, messy metadata on smaller
+  /// labels), so a URI-first-only match let a real bulk import split one
+  /// album's tracks across several duplicate `Albums` rows. On a
+  /// fallback match, the row's spotifyURI is refreshed to the new value
+  /// -- same "reassignment" handling [getOrCreateSongId] already has for
+  /// tracks. Backfills [recordLabel] only if the row doesn't already have
+  /// one. Zero or 2+ name matches falls through to inserting a new row,
+  /// same ambiguous-means-don't-guess posture as [getOrCreateArtistId].
   Future<int> getOrCreateAlbumId(
     DatabaseExecutor txn, {
     required String? spotifyURI,
@@ -95,33 +103,52 @@ class MixlistIngestion {
     required int artistId,
     String? recordLabel,
   }) async {
-    List<Map<String, Object?>> existing;
     if (spotifyURI != null) {
-      existing = await txn.query(
+      final byUri = await txn.query(
         'Albums',
         columns: ['id'],
         where: 'spotifyURI = ?',
         whereArgs: [spotifyURI],
         limit: 1,
       );
-    } else {
-      final normalized = name.trim().toLowerCase();
-      final forArtist = await txn.query(
-        'Albums',
-        columns: ['id', 'name'],
-        where: 'artist = ?',
-        whereArgs: [artistId],
-      );
-      existing = forArtist
-          .where(
-            (row) => (row['name'] as String).trim().toLowerCase() == normalized,
-          )
-          .take(2)
-          .toList();
+      if (byUri.isNotEmpty) {
+        final albumId = byUri.first['id'] as int;
+        if (recordLabel != null) {
+          await txn.update(
+            'Albums',
+            {'recordLabel': recordLabel},
+            where: 'id = ? AND recordLabel IS NULL',
+            whereArgs: [albumId],
+          );
+        }
+        return albumId;
+      }
     }
 
-    if (existing.length == 1) {
-      final albumId = existing.first['id'] as int;
+    final normalized = name.trim().toLowerCase();
+    final forArtist = await txn.query(
+      'Albums',
+      columns: ['id', 'name'],
+      where: 'artist = ?',
+      whereArgs: [artistId],
+    );
+    final matches = forArtist
+        .where(
+          (row) => (row['name'] as String).trim().toLowerCase() == normalized,
+        )
+        .take(2)
+        .toList();
+
+    if (matches.length == 1) {
+      final albumId = matches.first['id'] as int;
+      if (spotifyURI != null) {
+        await txn.update(
+          'Albums',
+          {'spotifyURI': spotifyURI},
+          where: 'id = ? AND spotifyURI != ?',
+          whereArgs: [albumId, spotifyURI],
+        );
+      }
       if (recordLabel != null) {
         await txn.update(
           'Albums',
