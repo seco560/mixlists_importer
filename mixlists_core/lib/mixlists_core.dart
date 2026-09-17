@@ -19,3 +19,4 @@ export 'src/entities/song_mixlist.dart';
 export 'src/csv/mixlist_csv_parser.dart';
 
 export 'src/repository/mixlist_ingestion.dart';
+export 'src/repository/mixlist_supplement.dart';
