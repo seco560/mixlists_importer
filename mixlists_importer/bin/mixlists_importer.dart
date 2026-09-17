@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:mixlists_importer/src/cli/auth_command.dart';
+import 'package:mixlists_importer/src/cli/run_command.dart';
 import 'package:mixlists_importer/src/cli/whoami_command.dart';
 
 Future<void> main(List<String> arguments) async {
@@ -10,7 +11,8 @@ Future<void> main(List<String> arguments) async {
     'Pulls your Spotify playlists into a local mixlists.db.',
   )
     ..addCommand(AuthCommand())
-    ..addCommand(WhoAmICommand());
+    ..addCommand(WhoAmICommand())
+    ..addCommand(RunCommand());
 
   try {
     await runner.run(arguments);
