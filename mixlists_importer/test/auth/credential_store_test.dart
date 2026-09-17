@@ -26,6 +26,7 @@ void main() {
     final path = '${tempDir.path}/nested/credentials.json';
     final store = CredentialStore(overridePath: path);
     final tokens = SpotifyTokens(
+      clientId: 'client-abc',
       accessToken: 'access-123',
       refreshToken: 'refresh-456',
       expiresAt: DateTime.utc(2026, 1, 1, 12),
@@ -36,7 +37,8 @@ void main() {
     final reloaded = await store.read();
 
     expect(reloaded, isNotNull);
-    expect(reloaded!.accessToken, tokens.accessToken);
+    expect(reloaded!.clientId, tokens.clientId);
+    expect(reloaded.accessToken, tokens.accessToken);
     expect(reloaded.refreshToken, tokens.refreshToken);
     expect(reloaded.expiresAt, tokens.expiresAt);
     expect(reloaded.scope, tokens.scope);
@@ -47,6 +49,7 @@ void main() {
     final store = CredentialStore(overridePath: path);
     await store.write(
       SpotifyTokens(
+        clientId: 'client-abc',
         accessToken: 'x',
         refreshToken: 'y',
         expiresAt: DateTime.now(),
@@ -56,14 +59,27 @@ void main() {
     expect(File(path).existsSync(), isTrue);
   });
 
+  test('reading a pre-clientId-field credentials file fails with a clear message', () async {
+    final path = '${tempDir.path}/legacy/credentials.json';
+    final store = CredentialStore(overridePath: path);
+    await File(path).create(recursive: true);
+    await File(path).writeAsString(
+      '{"accessToken":"a","refreshToken":"r",'
+      '"expiresAt":"2026-01-01T00:00:00.000Z","scope":"s"}',
+    );
+    await expectLater(store.read(), throwsA(isA<SpotifyAuthException>()));
+  });
+
   test('isExpired is true 30s before expiresAt and false well before it', () {
     final almostExpired = SpotifyTokens(
+      clientId: 'client-abc',
       accessToken: 'a',
       refreshToken: 'r',
       expiresAt: DateTime.now().add(const Duration(seconds: 10)),
       scope: 's',
     );
     final freshlyIssued = SpotifyTokens(
+      clientId: 'client-abc',
       accessToken: 'a',
       refreshToken: 'r',
       expiresAt: DateTime.now().add(const Duration(hours: 1)),

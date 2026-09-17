@@ -53,9 +53,7 @@ class AuthCommand extends Command<void> {
 
     await CredentialStore().write(tokens);
 
-    final displayName = await auth.fetchCurrentUserDisplayName(
-      tokens.accessToken,
-    );
+    final displayName = await fetchCurrentUserDisplayName(tokens.accessToken);
     print('Authenticated as: $displayName');
     print('Credentials saved to ${CredentialStore.defaultCredentialsPath()}');
   }

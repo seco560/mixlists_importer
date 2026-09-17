@@ -6,11 +6,17 @@ import 'spotify_auth.dart';
 /// on any refresh call, so always overwrite it rather than assuming the
 /// original stays valid). Every other command builds on this instead of
 /// re-running the interactive login.
+///
+/// Deliberately doesn't require a Client ID up front: the stored tokens
+/// already carry the Client ID they were issued under, so a valid,
+/// unexpired login needs no Client ID at all, and an expired one falls
+/// back to the stored value unless [clientIdOverride] is given.
 class AuthSession {
-  AuthSession(this._auth, this._store);
+  AuthSession(this._store, {String? clientIdOverride})
+    : _clientIdOverride = clientIdOverride;
 
-  final SpotifyAuth _auth;
   final CredentialStore _store;
+  final String? _clientIdOverride;
 
   Future<SpotifyTokens> ensureValidTokens() async {
     final tokens = await _store.read();
@@ -21,7 +27,8 @@ class AuthSession {
     }
     if (!tokens.isExpired) return tokens;
 
-    final refreshed = await _auth.refresh(tokens);
+    final auth = SpotifyAuth(clientId: _clientIdOverride ?? tokens.clientId);
+    final refreshed = await auth.refresh(tokens);
     await _store.write(refreshed);
     return refreshed;
   }

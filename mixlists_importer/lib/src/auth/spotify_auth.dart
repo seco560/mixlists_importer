@@ -23,16 +23,21 @@ class SpotifyAuthException implements Exception {
   String toString() => 'Spotify auth error: $message';
 }
 
-/// An access/refresh token pair. No client secret is ever involved --
-/// PKCE is a public-client flow.
+/// An access/refresh token pair, plus the Client ID they were issued
+/// under -- storing it means later commands (`whoami`, `run`, ...) don't
+/// have to ask for `--client-id` again just to refresh an already-valid
+/// login. No client secret is ever involved -- PKCE is a public-client
+/// flow.
 class SpotifyTokens {
   const SpotifyTokens({
+    required this.clientId,
     required this.accessToken,
     required this.refreshToken,
     required this.expiresAt,
     required this.scope,
   });
 
+  final String clientId;
   final String accessToken;
   final String refreshToken;
   final DateTime expiresAt;
@@ -44,18 +49,29 @@ class SpotifyTokens {
       DateTime.now().isAfter(expiresAt.subtract(const Duration(seconds: 30)));
 
   Map<String, Object?> toJson() => {
+    'clientId': clientId,
     'accessToken': accessToken,
     'refreshToken': refreshToken,
     'expiresAt': expiresAt.toIso8601String(),
     'scope': scope,
   };
 
-  factory SpotifyTokens.fromJson(Map<String, Object?> json) => SpotifyTokens(
-    accessToken: json['accessToken'] as String,
-    refreshToken: json['refreshToken'] as String,
-    expiresAt: DateTime.parse(json['expiresAt'] as String),
-    scope: json['scope'] as String,
-  );
+  factory SpotifyTokens.fromJson(Map<String, Object?> json) {
+    final clientId = json['clientId'] as String?;
+    if (clientId == null) {
+      throw SpotifyAuthException(
+        'Stored credentials are from an older format that did not save the '
+        'Client ID -- run `mixlists_importer auth` again.',
+      );
+    }
+    return SpotifyTokens(
+      clientId: clientId,
+      accessToken: json['accessToken'] as String,
+      refreshToken: json['refreshToken'] as String,
+      expiresAt: DateTime.parse(json['expiresAt'] as String),
+      scope: json['scope'] as String,
+    );
+  }
 }
 
 /// Drives the Authorization Code + PKCE flow against a loopback redirect,
@@ -172,6 +188,7 @@ class SpotifyAuth {
     }
 
     return SpotifyTokens(
+      clientId: clientId,
       accessToken: json['access_token'] as String,
       refreshToken: refreshToken,
       expiresAt: DateTime.now().add(
@@ -180,21 +197,22 @@ class SpotifyAuth {
       scope: (json['scope'] as String?) ?? scopes.join(' '),
     );
   }
+}
 
-  /// A minimal call to confirm a token actually works and report who's
-  /// authenticated -- used by `auth`/`whoami`, not part of the main
-  /// playlist-fetching path.
-  Future<String> fetchCurrentUserDisplayName(String accessToken) async {
-    final response = await http.get(
-      Uri.parse(_mePath),
-      headers: {'Authorization': 'Bearer $accessToken'},
+/// A minimal call to confirm a token actually works and report who's
+/// authenticated -- used by `auth`/`whoami`, not part of the main
+/// playlist-fetching path. Free function, not a `SpotifyAuth` method,
+/// since GET /me needs only a bearer token -- no Client ID involved.
+Future<String> fetchCurrentUserDisplayName(String accessToken) async {
+  final response = await http.get(
+    Uri.parse(_mePath),
+    headers: {'Authorization': 'Bearer $accessToken'},
+  );
+  if (response.statusCode != 200) {
+    throw SpotifyAuthException(
+      'GET /me failed (${response.statusCode}): ${response.body}',
     );
-    if (response.statusCode != 200) {
-      throw SpotifyAuthException(
-        'GET /me failed (${response.statusCode}): ${response.body}',
-      );
-    }
-    final json = jsonDecode(response.body) as Map<String, Object?>;
-    return (json['display_name'] as String?) ?? (json['id'] as String);
   }
+  final json = jsonDecode(response.body) as Map<String, Object?>;
+  return (json['display_name'] as String?) ?? (json['id'] as String);
 }
