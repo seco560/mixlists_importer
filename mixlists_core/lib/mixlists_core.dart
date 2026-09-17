@@ -7,6 +7,7 @@ library;
 export 'src/database/schema_v2.dart';
 export 'src/database/schema_v3.dart';
 export 'src/database/schema_v4.dart';
+export 'src/database/schema_v5.dart';
 
 export 'src/entities/album.dart';
 export 'src/entities/artist.dart';

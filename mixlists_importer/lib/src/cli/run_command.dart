@@ -117,11 +117,12 @@ class RunCommand extends Command<void> {
     final db = await databaseFactory.openDatabase(
       outPath,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onCreate: (db, version) async {
           await createSchemaV2(db);
           await applySchemaV3(db);
           await applySchemaV4(db);
+          await applySchemaV5(db);
         },
       ),
     );
