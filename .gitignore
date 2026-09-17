@@ -1,0 +1,11 @@
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+
+# Library package: don't pin transitive deps for consumers.
+mixlists_core/pubspec.lock
+
+# Credentials the importer CLI will write once it exists (Phase 2+).
+mixlists_importer/credentials.json
